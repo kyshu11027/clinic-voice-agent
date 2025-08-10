@@ -10,8 +10,8 @@ class ServiceType(str, Enum):
     CONSULTATION = "consultation"
 
 class Location(str, Enum):
-    DOWNTOWN = "downtown"
-    WEST_SIDE = "west_side"
+    HIGHLAND_PARK = "highland_park"
+    ARLINGTON_HEIGHTS = "arlington_heights"
 
 class Doctor(BaseModel):
     id: str
@@ -55,6 +55,7 @@ class CallState(BaseModel):
     preferred_date: Optional[str] = None
     preferred_time: Optional[str] = None
     appointment_id: Optional[str] = None  # For rescheduling
+    available_slots: Optional[List[AvailableSlot]] = None
     created_at: datetime = Field(default_factory=datetime.now)
 
 class IntentResponse(BaseModel):

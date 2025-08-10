@@ -1,7 +1,7 @@
 import logging
 from typing import Dict, Optional, List
 from datetime import datetime, timedelta
-from .models import CallState, ServiceType, Location, Appointment
+from .models import CallState, ServiceType, Location, Appointment, IntentResponse
 from .calendar_service import CalendarService
 from .nlu import NLUProcessor
 
@@ -44,7 +44,7 @@ class CallFlowManager:
         else:
             return "I'm sorry, I didn't understand. How can I help you today?"
     
-    def _handle_greeting_step(self, call_state: CallState, intent_response: 'IntentResponse') -> str:
+    def _handle_greeting_step(self, call_state: CallState, intent_response: IntentResponse) -> str:
         """Handle the initial greeting step"""
         if intent_response.intent == "schedule":
             call_state.current_step = "collecting_info"
@@ -92,7 +92,7 @@ class CallFlowManager:
             # We have enough info to look for slots
             return self._find_available_slots(call_state)
     
-    def _handle_collecting_info_step(self, call_state: CallState, intent_response: 'IntentResponse') -> str:
+    def _handle_collecting_info_step(self, call_state: CallState, intent_response: IntentResponse) -> str:
         """Handle the information collection step"""
         # Update call state with new information
         entities = intent_response.entities
@@ -130,6 +130,10 @@ class CallFlowManager:
     
     def _find_available_slots(self, call_state: CallState) -> str:
         """Find available appointment slots"""
+        # Ensure required fields are present
+        if not call_state.service_type or not call_state.location:
+            return "I'm sorry, I need both service type and location to find available slots."
+            
         try:
             slots = self.calendar_service.list_available_slots(
                 service_type=call_state.service_type,
@@ -159,7 +163,7 @@ class CallFlowManager:
             logger.error(f"Error finding available slots: {e}")
             return "I'm sorry, I'm having trouble checking our availability right now. Please call back in a few minutes."
     
-    def _handle_confirming_appointment_step(self, call_state: CallState, intent_response: 'IntentResponse') -> str:
+    def _handle_confirming_appointment_step(self, call_state: CallState, intent_response: IntentResponse) -> str:
         """Handle appointment confirmation step"""
         speech_text = intent_response.entities.get('speech_text', '').lower()
         
@@ -169,8 +173,12 @@ class CallFlowManager:
         
         if number_match:
             slot_number = int(number_match.group(1))
-            if 1 <= slot_number <= len(call_state.available_slots):
+            if call_state.available_slots and 1 <= slot_number <= len(call_state.available_slots):
                 selected_slot = call_state.available_slots[slot_number - 1]
+                
+                # Ensure all required fields are present
+                if not call_state.service_type or not call_state.location or not call_state.patient_name:
+                    return "I'm sorry, I'm missing some information. Please start over."
                 
                 # Create the appointment
                 appointment = self.calendar_service.create_appointment(
@@ -193,11 +201,14 @@ class CallFlowManager:
                 else:
                     return "I'm sorry, I wasn't able to schedule your appointment. Please call back and try again."
             else:
-                return f"Please choose a number between 1 and {len(call_state.available_slots)}."
+                if call_state.available_slots:
+                    return f"Please choose a number between 1 and {len(call_state.available_slots)}."
+                else:
+                    return "Please choose a valid appointment number."
         else:
             return "I didn't catch which appointment time you'd like. Please say the number of your preferred time."
     
-    def _handle_rescheduling_step(self, call_state: CallState, intent_response: 'IntentResponse') -> str:
+    def _handle_rescheduling_step(self, call_state: CallState, intent_response: IntentResponse) -> str:
         """Handle rescheduling step"""
         # For MVP, we'll just acknowledge the request
         return "I understand you'd like to reschedule your appointment. This feature is coming soon! Please call our office directly to reschedule."

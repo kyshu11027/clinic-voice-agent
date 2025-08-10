@@ -78,7 +78,7 @@ class CalendarService:
         self, 
         service_type: ServiceType, 
         location: Location, 
-        date_range: tuple = None
+        date_range: Optional[tuple] = None
     ) -> List[AvailableSlot]:
         """List available appointment slots for a service type and location"""
         if date_range is None:

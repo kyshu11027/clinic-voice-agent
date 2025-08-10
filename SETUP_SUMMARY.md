@@ -57,14 +57,14 @@
 
 # Or manually:
 source venv/bin/activate
-uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+python main.py
 ```
 
 ### For Testing:
 ```bash
 # Run the test suite
 source venv/bin/activate
-python test_setup.py
+python run_tests.py
 
 # Test the API
 curl http://localhost:8000/health
@@ -112,17 +112,27 @@ To make the voice agent fully functional, you'll need to:
 
 ```
 clinic-voice-agent/
-├── main.py              # FastAPI application
-├── models.py            # Data models
-├── calendar_service.py  # Calendar integration
-├── nlu.py              # Natural Language Understanding
-├── call_flow.py        # Conversation management
-├── data/clinic.json    # Clinic configuration
-├── requirements.txt    # Dependencies
-├── venv/               # Virtual environment
-├── activate.sh         # Development startup script
-├── test_setup.py       # Test suite
-└── README.md           # Documentation
+├── main.py                 # Main entry point
+├── run_tests.py            # Test runner
+├── activate.sh             # Development startup script
+├── backend/
+│   ├── src/                # Source code
+│   │   ├── __init__.py
+│   │   ├── main.py         # FastAPI application
+│   │   ├── models.py       # Data models
+│   │   ├── calendar_service.py  # Calendar integration
+│   │   ├── nlu.py          # Natural Language Understanding
+│   │   ├── call_flow.py    # Conversation management
+│   │   └── data/
+│   │       └── clinic.json # Clinic configuration
+│   ├── tests/              # Test files
+│   │   └── test_setup.py   # Test suite
+│   ├── deployment/         # Deployment configuration
+│   │   ├── Dockerfile      # Docker configuration
+│   │   └── docker-compose.yml # Docker Compose configuration
+│   └── requirements.txt    # Dependencies
+├── venv/                   # Virtual environment
+└── README.md               # Documentation
 ```
 
 ## 🎯 MVP Features Working

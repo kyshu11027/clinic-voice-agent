@@ -18,7 +18,7 @@
       "id": "dr_smith",
       "name": "Dr. Sarah Smith",
       "specialties": ["chiropractic", "massage"],
-      "locations": ["downtown", "west_side"],
+      "locations": ["arlington_heights", "highland_park"],
       "available_days": ["monday", "tuesday", "wednesday", "thursday", "friday"],
       "start_time": "09:00",
       "end_time": "17:00"
@@ -27,7 +27,7 @@
       "id": "dr_johnson",
       "name": "Dr. Michael Johnson",
       "specialties": ["acupuncture", "consultation"],
-      "locations": ["downtown"],
+      "locations": ["arlington_heights", "highland_park"],
       "available_days": ["monday", "wednesday", "friday"],
       "start_time": "10:00",
       "end_time": "18:00"
@@ -36,7 +36,7 @@
       "id": "dr_lee",
       "name": "Dr. Jennifer Lee",
       "specialties": ["chiropractic", "acupuncture"],
-      "locations": ["west_side"],
+      "locations": ["arlington_heights"],
       "available_days": ["tuesday", "thursday", "saturday"],
       "start_time": "08:00",
       "end_time": "16:00"

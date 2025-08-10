@@ -1,7 +1,7 @@
 import logging
 from typing import Dict, Optional, List
 from datetime import datetime, timedelta
-from .models import CallState, ServiceType, Location, Appointment, IntentResponse
+from .models import CallState, ServiceType, Location, Appointment, IntentResponse, CallStep, Intent
 from .calendar_service import CalendarService
 from .nlu import NLUProcessor
 
@@ -33,29 +33,32 @@ class CallFlowManager:
         call_state.entities.update(intent_response.entities)
         
         # Route based on current step and intent
-        if call_state.current_step == "greeting":
+        if call_state.current_step == CallStep.GREETING:
             return self._handle_greeting_step(call_state, intent_response)
-        elif call_state.current_step == "collecting_info":
+        elif call_state.current_step == CallStep.COLLECTING_INFO:
             return self._handle_collecting_info_step(call_state, intent_response)
-        elif call_state.current_step == "confirming_appointment":
+        elif call_state.current_step == CallStep.CONFIRMING_APPOINTMENT:
             return self._handle_confirming_appointment_step(call_state, intent_response)
-        elif call_state.current_step == "rescheduling":
+        elif call_state.current_step == CallStep.RESCHEDULING:
             return self._handle_rescheduling_step(call_state, intent_response)
+        elif call_state.current_step == CallStep.CANCELING:
+            return self._handle_canceling_step(call_state, intent_response)
         else:
             return "I'm sorry, I didn't understand. How can I help you today?"
     
     def _handle_greeting_step(self, call_state: CallState, intent_response: IntentResponse) -> str:
         """Handle the initial greeting step"""
-        if intent_response.intent == "schedule":
-            call_state.current_step = "collecting_info"
-            return self._start_scheduling_flow(call_state, intent_response.entities)
-        elif intent_response.intent == "reschedule":
-            call_state.current_step = "rescheduling"
-            return "I can help you reschedule your appointment. What's your name and when is your current appointment?"
-        elif intent_response.intent == "cancel":
-            return "I can help you cancel your appointment. What's your name and when is your appointment?"
+        if intent_response.intent == Intent.SCHEDULE:
+            call_state.current_step = CallStep.COLLECTING_INFO
+            return "I'd be happy to help you schedule an appointment. Let me gather some information from you. What type of service would you like - chiropractic, acupuncture, massage, or consultation?"
+        elif intent_response.intent == Intent.RESCHEDULE:
+            call_state.current_step = CallStep.RESCHEDULING
+            return "I can help you reschedule your appointment. First, what's your name?"
+        elif intent_response.intent == Intent.CANCEL:
+            call_state.current_step = CallStep.CANCELING
+            return "I can help you cancel your appointment. First, what's your name?"
         else:
-            return intent_response.response_message
+            return "I can help you with scheduling, rescheduling, or canceling appointments. What would you like to do?"
     
     def _start_scheduling_flow(self, call_state: CallState, entities: Dict) -> str:
         """Start the scheduling flow"""
@@ -96,37 +99,76 @@ class CallFlowManager:
         """Handle the information collection step"""
         # Update call state with new information
         entities = intent_response.entities
+        speech_text = intent_response.entities.get('speech_text', '').lower()
         
-        if entities.get('service_type') and not call_state.service_type:
-            try:
-                call_state.service_type = ServiceType(entities['service_type'])
-            except ValueError:
-                pass
-        
-        if entities.get('location') and not call_state.location:
-            try:
-                call_state.location = Location(entities['location'])
-            except ValueError:
-                pass
-        
-        if entities.get('patient_name') and not call_state.patient_name:
-            call_state.patient_name = entities['patient_name']
-        
-        # Check if we have all required information
-        if call_state.service_type and call_state.location and call_state.patient_name:
-            return self._find_available_slots(call_state)
-        else:
-            # Still missing information
-            missing_info = []
-            if not call_state.service_type:
-                missing_info.append("service type")
-            if not call_state.location:
-                missing_info.append("location")
-            if not call_state.patient_name:
-                missing_info.append("your name")
+        # Step 1: Get service type
+        if not call_state.service_type:
+            if entities.get('service_type'):
+                try:
+                    call_state.service_type = ServiceType(entities['service_type'])
+                except ValueError:
+                    pass
             
-            missing_str = ", ".join(missing_info)
-            return f"I still need: {missing_str}. Please provide this information."
+            if not call_state.service_type:
+                # Check for service type in speech
+                if any(word in speech_text for word in ['chiropractic', 'adjustment']):
+                    call_state.service_type = ServiceType.CHIROPRACTIC
+                elif 'acupuncture' in speech_text:
+                    call_state.service_type = ServiceType.ACUPUNCTURE
+                elif 'massage' in speech_text:
+                    call_state.service_type = ServiceType.MASSAGE
+                elif any(word in speech_text for word in ['consultation', 'consult']):
+                    call_state.service_type = ServiceType.CONSULTATION
+                else:
+                    return "I didn't catch the service type. Please choose from: chiropractic, acupuncture, massage, or consultation."
+            
+            # Move to next step
+            return "Great! Which location would you prefer - Highland Park or Arlington Heights?"
+        
+        # Step 2: Get location
+        elif not call_state.location:
+            if entities.get('location'):
+                try:
+                    call_state.location = Location(entities['location'])
+                except ValueError:
+                    pass
+            
+            if not call_state.location:
+                # Check for location in speech
+                if any(word in speech_text for word in ['highland park']):
+                    call_state.location = Location.HIGHLAND_PARK
+                elif any(word in speech_text for word in ['arlington heights']):
+                    call_state.location = Location.ARLINGTON_HEIGHTS
+                else:
+                    return "I didn't catch the location. Please choose: Highland Park or Arlington Heights."
+            
+            # Move to next step
+            return "Perfect! What's your name?"
+        
+        # Step 3: Get patient name
+        elif not call_state.patient_name:
+            if entities.get('patient_name'):
+                call_state.patient_name = entities['patient_name']
+            else:
+                # Try to extract name from speech (simple approach)
+                import re
+                # Look for common name patterns
+                name_match = re.search(r'my name is (\w+)', speech_text)
+                if name_match:
+                    call_state.patient_name = name_match.group(1).title()
+                else:
+                    # Just use the first few words as name
+                    words = speech_text.split()
+                    if len(words) >= 2:
+                        call_state.patient_name = f"{words[0].title()} {words[1].title()}"
+                    else:
+                        return "I didn't catch your name. Please tell me your name."
+            
+            # We have all the information, find available slots
+            return self._find_available_slots(call_state)
+        
+        # Fallback - should not reach here
+        return "I'm sorry, I'm having trouble understanding. Please start over."
     
     def _find_available_slots(self, call_state: CallState) -> str:
         """Find available appointment slots"""
@@ -156,7 +198,7 @@ class CallFlowManager:
             
             slots_text = ". ".join(slot_descriptions)
             
-            call_state.current_step = "confirming_appointment"
+            call_state.current_step = CallStep.CONFIRMING_APPOINTMENT
             return f"Great! I found some available {call_state.service_type.value} appointments at our {call_state.location.value} location. Here are your options: {slots_text}. Which one would you like? Please say the number."
             
         except Exception as e:
@@ -212,6 +254,11 @@ class CallFlowManager:
         """Handle rescheduling step"""
         # For MVP, we'll just acknowledge the request
         return "I understand you'd like to reschedule your appointment. This feature is coming soon! Please call our office directly to reschedule."
+    
+    def _handle_canceling_step(self, call_state: CallState, intent_response: IntentResponse) -> str:
+        """Handle appointment cancellation step"""
+        # For MVP, we'll just acknowledge the request
+        return "I understand you'd like to cancel your appointment. This feature is coming soon! Please call our office directly to cancel."
     
     def cleanup_old_states(self, max_age_hours: int = 24):
         """Clean up old call states"""

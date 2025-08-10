@@ -1,9 +1,9 @@
 import os
 import json
 import logging
-import openai
+from openai import OpenAI
 from typing import Dict, Any, Optional
-from .models import IntentResponse, ServiceType, Location
+from .models import IntentResponse, ServiceType, Location, Intent
 
 logger = logging.getLogger(__name__)
 
@@ -20,10 +20,10 @@ class NLUProcessor:
             return
             
         try:
-            self.client = openai.OpenAI(api_key=api_key)
-            logger.info("OpenAI client initialized")
+            self.client = OpenAI(api_key=api_key)
         except Exception as e:
             logger.error(f"Failed to initialize OpenAI client: {e}")
+            # Continue without OpenAI - will use fallback keyword matching
     
     def parse_intent(self, text: str) -> IntentResponse:
         """Parse user intent and extract entities from text"""
@@ -39,7 +39,7 @@ class NLUProcessor:
             Extract the following information:
             - intent: "schedule", "reschedule", "cancel", "question", or "other"
             - service_type: "chiropractic", "acupuncture", "massage", "consultation", or null
-            - location: "downtown", "west_side", or null
+            - location: "arlington_heights", "highland_park", or null
             - doctor_name: name of doctor if mentioned, or null
             - preferred_date: date if mentioned, or null
             - preferred_time: time if mentioned, or null
@@ -102,13 +102,13 @@ class NLUProcessor:
         
         # Determine intent
         if any(word in text_lower for word in ['schedule', 'book', 'make appointment', 'new appointment']):
-            intent = 'schedule'
+            intent = Intent.SCHEDULE
         elif any(word in text_lower for word in ['reschedule', 'change appointment', 'move appointment']):
-            intent = 'reschedule'
+            intent = Intent.RESCHEDULE
         elif any(word in text_lower for word in ['cancel', 'cancel appointment']):
-            intent = 'cancel'
+            intent = Intent.CANCEL
         else:
-            intent = 'other'
+            intent = Intent.OTHER
         
         # Extract service type
         if 'chiropractic' in text_lower or 'adjustment' in text_lower:
@@ -121,10 +121,10 @@ class NLUProcessor:
             entities['service_type'] = 'consultation'
         
         # Extract location
-        if 'downtown' in text_lower:
-            entities['location'] = 'downtown'
-        elif 'west side' in text_lower or 'westside' in text_lower:
-            entities['location'] = 'west_side'
+        if Location.ARLINGTON_HEIGHTS.value in text_lower:
+            entities['location'] = Location.ARLINGTON_HEIGHTS.value
+        elif Location.HIGHLAND_PARK.value in text_lower:
+            entities['location'] = Location.HIGHLAND_PARK.value
         
         # Extract doctor name (basic pattern matching)
         import re
@@ -157,7 +157,7 @@ class NLUProcessor:
             if entities.get('service_type') and entities.get('location'):
                 return f"I can help you schedule a {entities['service_type']} appointment at our {entities['location']} location. Let me check our available times."
             elif entities.get('service_type'):
-                return f"I can help you schedule a {entities['service_type']} appointment. Which location would you prefer - downtown or west side?"
+                return f"I can help you schedule a {entities['service_type']} appointment. Which location would you prefer - {Location.ARLINGTON_HEIGHTS.value} or {Location.HIGHLAND_PARK.value}?"
             elif entities.get('location'):
                 return f"I can help you schedule an appointment at our {entities['location']} location. What type of service would you like?"
             else:

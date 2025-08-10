@@ -144,7 +144,7 @@ def test_calendar_service():
         # Test available slots generation
         slots = service.list_available_slots(
             service_type=ServiceType.CHIROPRACTIC,
-            location=Location.DOWNTOWN
+            location=Location.ARLINGTON_HEIGHTS
         )
         print(f"✓ Generated {len(slots)} available slots")
         
@@ -164,7 +164,7 @@ def test_nlu_processor():
         processor = NLUProcessor()
         
         # Test intent parsing
-        test_text = "I'd like to schedule a chiropractic appointment at the downtown location"
+        test_text = "I'd like to schedule a chiropractic appointment at the arlington heights location"
         result = processor.parse_intent(test_text)
         
         print(f"✓ Intent parsing successful")

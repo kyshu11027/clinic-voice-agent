@@ -5,6 +5,7 @@ from fastapi.responses import PlainTextResponse
 from dotenv import load_dotenv
 from twilio.twiml.voice_response import VoiceResponse, Gather
 from .call_flow import CallFlowManager
+from .models import CallStep
 
 # Load environment variables
 load_dotenv()
@@ -42,7 +43,7 @@ async def handle_incoming_call(request: Request):
         speech_timeout='auto',
         language='en-US'
     )
-    gather.say("Please tell me what you'd like to do. You can say things like 'schedule an appointment' or 'reschedule my appointment'.")
+    gather.say("Please tell me what you'd like to do. You can say things like 'schedule an appointment', 'reschedule my appointment', or 'cancel my appointment'.")
     response.append(gather)
     
     # Fallback if no input
@@ -71,11 +72,33 @@ async def handle_speech_input(
     try:
         response_message = call_flow_manager.process_speech_input(CallSid, SpeechResult)
         response.say(response_message)
+        
+        # Get current call state to determine if we should continue
+        call_state = call_flow_manager.get_or_create_call_state(CallSid)
+        
+        # Continue conversation if not at final step (appointment confirmation)
+        if call_state.current_step != CallStep.CONFIRMING_APPOINTMENT:
+            gather = Gather(
+                input='speech',
+                action='/voice/handle',
+                method='POST',
+                speech_timeout='auto',
+                language='en-US'
+            )
+            response.append(gather)
+            
+            # Fallback if no input
+            response.say("I didn't hear anything. Please call back and let me know how I can help you.")
+            response.hangup()
+        else:
+            # End call after appointment confirmation
+            response.hangup()
+        
     except Exception as e:
         logger.error(f"Error processing speech input: {e}")
         response.say("I'm sorry, I'm having trouble understanding right now. Please call back in a few minutes.")
+        response.hangup()
     
-    response.hangup()
     return PlainTextResponse(str(response), media_type="application/xml")
 
 if __name__ == "__main__":

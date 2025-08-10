@@ -7,7 +7,7 @@ An AI-powered voice agent that answers calls and schedules/reschedules appointme
 - **Voice Call Handling**: Receives incoming calls via Twilio
 - **Natural Language Understanding**: Uses OpenAI GPT-4 to understand caller intent
 - **Appointment Scheduling**: Books appointments with available doctors
-- **Multi-location Support**: Handles 2 clinic locations (Downtown and West Side)
+- **Multi-location Support**: Handles 2 clinic locations (Arlington Heights and Highland Park)
 - **Multiple Service Types**: Chiropractic, Acupuncture, Massage, and Consultation
 - **State Management**: Maintains conversation context throughout the call
 

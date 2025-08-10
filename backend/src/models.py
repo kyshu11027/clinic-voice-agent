@@ -3,6 +3,19 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime, time
 from enum import Enum
 
+class CallStep(str, Enum):
+    GREETING = "greeting"
+    COLLECTING_INFO = "collecting_info"
+    CONFIRMING_APPOINTMENT = "confirming_appointment"
+    RESCHEDULING = "rescheduling"
+    CANCELING = "canceling"
+
+class Intent(str, Enum):
+    SCHEDULE = "schedule"
+    RESCHEDULE = "reschedule"
+    CANCEL = "cancel"
+    OTHER = "other"
+
 class ServiceType(str, Enum):
     CHIROPRACTIC = "chiropractic"
     ACUPUNCTURE = "acupuncture"
@@ -44,8 +57,8 @@ class AvailableSlot(BaseModel):
 
 class CallState(BaseModel):
     call_sid: str
-    current_step: str = "greeting"
-    intent: Optional[str] = None
+    current_step: CallStep = CallStep.GREETING
+    intent: Optional[Intent] = None
     entities: Dict[str, Any] = Field(default_factory=dict)
     patient_name: Optional[str] = None
     patient_phone: Optional[str] = None
@@ -59,7 +72,7 @@ class CallState(BaseModel):
     created_at: datetime = Field(default_factory=datetime.now)
 
 class IntentResponse(BaseModel):
-    intent: str
+    intent: Intent
     confidence: float
     entities: Dict[str, Any] = Field(default_factory=dict)
     response_message: str

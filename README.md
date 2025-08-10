@@ -79,18 +79,19 @@ python main.py
 
 #### Option B: Using Uvicorn
 ```bash
-uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+cd backend && uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 #### Option C: Using Docker
 ```bash
-docker-compose up --build
+cd backend/deployment && docker-compose up --build
 ```
 
 ### 5. Test the Application
 
 1. **Health Check**: Visit `http://localhost:8000/health`
 2. **Voice Endpoint**: `http://localhost:8000/voice` (POST)
+3. **Run Tests**: `python run_tests.py`
 
 ### 6. Configure Twilio
 
@@ -106,17 +107,26 @@ docker-compose up --build
 
 ```
 clinic-voice-agent/
-├── main.py              # FastAPI application entry point
-├── models.py            # Pydantic data models
-├── calendar_service.py  # Google Calendar integration
-├── nlu.py              # Natural Language Understanding
-├── call_flow.py        # Conversation state management
-├── data/
-│   └── clinic.json     # Clinic configuration data
-├── requirements.txt    # Python dependencies
-├── Dockerfile         # Docker configuration
-├── docker-compose.yml # Docker Compose configuration
-└── README.md          # This file
+├── main.py                 # Main entry point
+├── run_tests.py            # Test runner
+├── activate.sh             # Development startup script
+├── backend/
+│   ├── src/                # Source code
+│   │   ├── __init__.py
+│   │   ├── main.py         # FastAPI application
+│   │   ├── models.py       # Pydantic data models
+│   │   ├── calendar_service.py  # Google Calendar integration
+│   │   ├── nlu.py          # Natural Language Understanding
+│   │   ├── call_flow.py    # Conversation state management
+│   │   └── data/
+│   │       └── clinic.json # Clinic configuration data
+│   ├── tests/              # Test files
+│   │   └── test_setup.py   # Setup verification tests
+│   ├── deployment/         # Deployment configuration
+│   │   ├── Dockerfile      # Docker configuration
+│   │   └── docker-compose.yml # Docker Compose configuration
+│   └── requirements.txt    # Python dependencies
+└── README.md              # This file
 ```
 
 ### Key Components

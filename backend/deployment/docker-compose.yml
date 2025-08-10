@@ -9,5 +9,5 @@ services:
       - APP_ENV=development
       - LOG_LEVEL=DEBUG
     volumes:
-      - .:/app
+      - ../src:/app/src
     restart: unless-stopped

@@ -4,6 +4,7 @@ Test script to verify the clinic voice agent setup
 """
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -53,28 +54,28 @@ def test_project_modules():
     print("\nTesting project modules...")
     
     try:
-        from models import ServiceType, Location, Doctor, Appointment
+        from backend.src.models import ServiceType, Location, Doctor, Appointment
         print("✓ Models imported successfully")
     except ImportError as e:
         print(f"✗ Models import failed: {e}")
         return False
     
     try:
-        from calendar_service import CalendarService
+        from backend.src.calendar_service import CalendarService
         print("✓ Calendar service imported successfully")
     except ImportError as e:
         print(f"✗ Calendar service import failed: {e}")
         return False
     
     try:
-        from nlu import NLUProcessor
+        from backend.src.nlu import NLUProcessor
         print("✓ NLU processor imported successfully")
     except ImportError as e:
         print(f"✗ NLU processor import failed: {e}")
         return False
     
     try:
-        from call_flow import CallFlowManager
+        from backend.src.call_flow import CallFlowManager
         print("✓ Call flow manager imported successfully")
     except ImportError as e:
         print(f"✗ Call flow manager import failed: {e}")
@@ -87,8 +88,23 @@ def test_clinic_data():
     print("\nTesting clinic data...")
     
     try:
-        with open('data/clinic.json', 'r') as f:
-            clinic_data = json.load(f)
+        # Try multiple possible paths for clinic.json
+        possible_paths = [
+            'data/clinic.json',
+            'backend/src/data/clinic.json',
+            'src/data/clinic.json'
+        ]
+        
+        clinic_data = None
+        for path in possible_paths:
+            if os.path.exists(path):
+                with open(path, 'r') as f:
+                    clinic_data = json.load(f)
+                break
+        
+        if not clinic_data:
+            print("✗ clinic.json not found in any expected location")
+            return False
         
         # Check required fields
         required_fields = ['locations', 'doctors', 'services', 'business_hours']
@@ -116,8 +132,8 @@ def test_calendar_service():
     print("\nTesting calendar service...")
     
     try:
-        from calendar_service import CalendarService
-        from models import ServiceType, Location
+        from backend.src.calendar_service import CalendarService
+        from backend.src.models import ServiceType, Location
         
         service = CalendarService()
         
@@ -143,7 +159,7 @@ def test_nlu_processor():
     print("\nTesting NLU processor...")
     
     try:
-        from nlu import NLUProcessor
+        from backend.src.nlu import NLUProcessor
         
         processor = NLUProcessor()
         
@@ -167,7 +183,7 @@ def test_call_flow():
     print("\nTesting call flow manager...")
     
     try:
-        from call_flow import CallFlowManager
+        from backend.src.call_flow import CallFlowManager
         
         manager = CallFlowManager()
         

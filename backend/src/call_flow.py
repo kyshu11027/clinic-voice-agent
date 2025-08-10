@@ -1,9 +1,9 @@
 import logging
 from typing import Dict, Optional, List
 from datetime import datetime, timedelta
-from models import CallState, ServiceType, Location, Appointment
-from calendar_service import CalendarService
-from nlu import NLUProcessor
+from .models import CallState, ServiceType, Location, Appointment
+from .calendar_service import CalendarService
+from .nlu import NLUProcessor
 
 logger = logging.getLogger(__name__)
 

@@ -7,7 +7,7 @@ from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
-from models import Appointment, AvailableSlot, Doctor, ServiceType, Location
+from .models import Appointment, AvailableSlot, Doctor, ServiceType, Location
 
 logger = logging.getLogger(__name__)
 
@@ -20,8 +20,20 @@ class CalendarService:
     def _load_clinic_data(self) -> Dict[str, Any]:
         """Load clinic configuration data"""
         try:
-            with open('data/clinic.json', 'r') as f:
-                return json.load(f)
+            # Try multiple possible paths for clinic.json
+            possible_paths = [
+                'data/clinic.json',
+                'src/data/clinic.json',
+                os.path.join(os.path.dirname(__file__), 'data/clinic.json')
+            ]
+            
+            for path in possible_paths:
+                if os.path.exists(path):
+                    with open(path, 'r') as f:
+                        return json.load(f)
+            
+            logger.error("clinic.json not found in any expected location")
+            return {}
         except FileNotFoundError:
             logger.error("clinic.json not found")
             return {}

@@ -11,4 +11,4 @@ echo ""
 echo "Press Ctrl+C to stop the server"
 echo ""
 
-uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+cd backend && uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload

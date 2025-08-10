@@ -3,7 +3,7 @@ import json
 import logging
 import openai
 from typing import Dict, Any, Optional
-from models import IntentResponse, ServiceType, Location
+from .models import IntentResponse, ServiceType, Location
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +60,9 @@ class NLUProcessor:
             
             # Parse the response
             content = response.choices[0].message.content
+            if not content:
+                logger.error("OpenAI returned empty content")
+                return self._fallback_intent_parsing(text)
             try:
                 result = json.loads(content)
                 

@@ -3,7 +3,7 @@ import json
 import logging
 from openai import OpenAI
 from datetime import datetime
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 from .models import IntentResponse, ServiceType, Location, Intent, LLMExtraction
 
 logger = logging.getLogger(__name__)

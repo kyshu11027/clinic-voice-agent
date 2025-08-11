@@ -1,11 +1,10 @@
 import os
 import json
 import logging
-from datetime import datetime, timedelta, time
+from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Any
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
-from googleapiclient.errors import HttpError
 
 from .models import Appointment, AvailableSlot, Doctor, ServiceType, Location
 

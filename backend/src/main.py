@@ -5,7 +5,6 @@ from fastapi.responses import PlainTextResponse
 from dotenv import load_dotenv
 from twilio.twiml.voice_response import VoiceResponse, Gather
 from .call_flow import CallFlowManager
-from .models import CallStep
 
 # Load environment variables
 load_dotenv()

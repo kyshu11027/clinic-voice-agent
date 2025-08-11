@@ -1,7 +1,7 @@
 import logging
 from typing import Dict, Optional, List
 from datetime import datetime, timedelta
-from .models import CallState, ServiceType, Location, Appointment, IntentResponse, CallStep, Intent
+from .models import CallState, ServiceType, Location, IntentResponse, CallStep, Intent
 from .calendar_service import CalendarService
 from .nlu import NLUProcessor
 

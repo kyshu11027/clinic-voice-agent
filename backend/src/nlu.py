@@ -38,7 +38,7 @@ class NLUProcessor:
             
             Extract the following information:
             - intent: "schedule", "reschedule", "cancel", "question", or "other"
-            - service_type: "chiropractic", "acupuncture", "massage", "consultation", or null
+            - service_type: "chiropractic", "acupuncture", "cupping", "consultation", or null
             - location: "arlington_heights", "highland_park", or null
             - doctor_name: name of doctor if mentioned, or null
             - preferred_date: date if mentioned, or null
@@ -115,8 +115,8 @@ class NLUProcessor:
             entities['service_type'] = 'chiropractic'
         elif 'acupuncture' in text_lower:
             entities['service_type'] = 'acupuncture'
-        elif 'massage' in text_lower:
-            entities['service_type'] = 'massage'
+        elif 'cupping' in text_lower:
+            entities['service_type'] = 'cupping'
         elif 'consultation' in text_lower or 'consult' in text_lower:
             entities['service_type'] = 'consultation'
         

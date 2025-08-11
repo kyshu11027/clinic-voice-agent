@@ -19,7 +19,7 @@ class Intent(str, Enum):
 class ServiceType(str, Enum):
     CHIROPRACTIC = "chiropractic"
     ACUPUNCTURE = "acupuncture"
-    MASSAGE = "massage"
+    CUPPING = "cupping"
     CONSULTATION = "consultation"
 
 class Location(str, Enum):

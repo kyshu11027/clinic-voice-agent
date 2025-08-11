@@ -8,7 +8,7 @@ An AI-powered voice agent that answers calls and schedules/reschedules appointme
 - **Natural Language Understanding**: Uses OpenAI GPT-4 to understand caller intent
 - **Appointment Scheduling**: Books appointments with available doctors
 - **Multi-location Support**: Handles 2 clinic locations (Arlington Heights and Highland Park)
-- **Multiple Service Types**: Chiropractic, Acupuncture, Massage, and Consultation
+- **Multiple Service Types**: Chiropractic, Acupuncture, Cupping, and Consultation
 - **State Management**: Maintains conversation context throughout the call
 
 ## Architecture

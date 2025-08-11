@@ -2,8 +2,9 @@ import os
 import json
 import logging
 from openai import OpenAI
+from datetime import datetime
 from typing import Dict, Any, Optional
-from .models import IntentResponse, ServiceType, Location, Intent
+from .models import IntentResponse, ServiceType, Location, Intent, LLMExtraction
 
 logger = logging.getLogger(__name__)
 
@@ -26,27 +27,33 @@ class NLUProcessor:
             # Continue without OpenAI - will use fallback keyword matching
     
     def parse_intent(self, text: str) -> IntentResponse:
-        """Parse user intent and extract entities from text"""
+        """Parse user intent and extract entities from text via LLM with strict schema, falling back if needed."""
+        if not self.client and os.getenv('OPENAI_API_KEY'):
+            self._init_openai()
         if not self.client:
-            # Fallback to basic keyword matching
             return self._fallback_intent_parsing(text)
         
         try:
-            system_prompt = """
-            You are an AI assistant for a chiropractic and acupuncture clinic. 
-            Your job is to understand what the caller wants and extract relevant information.
+            today_iso = datetime.now().date().isoformat()
+            intent_values = [intent.value for intent in Intent]
+            service_type_values = [service.value for service in ServiceType]
+            location_values = [location.value for location in Location]
             
-            Extract the following information:
-            - intent: "schedule", "reschedule", "cancel", "question", or "other"
-            - service_type: "chiropractic", "acupuncture", "cupping", "consultation", or null
-            - location: "arlington_heights", "highland_park", or null
-            - doctor_name: name of doctor if mentioned, or null
-            - preferred_date: date if mentioned, or null
-            - preferred_time: time if mentioned, or null
-            - patient_name: caller's name if mentioned, or null
-            
-            Return a JSON object with these fields.
-            """
+            system_prompt = (
+                f"Today is {today_iso} (user local calendar). "
+                "Resolve relative dates (e.g., 'this Friday', 'next Tuesday') to the nearest FUTURE calendar date. "
+                "If the date would be in the past, return null for preferred_date. "
+                "You extract structured slots for a clinic voice agent. "
+                "Return STRICT JSON only (no prose), matching this schema: {\n"
+                f"  \"intent\": one of {intent_values},\n"
+                f"  \"service_type\": one of {service_type_values} or null,\n"
+                f"  \"location\": one of {location_values} or null,\n"
+                "  \"preferred_date\": ISO date 'YYYY-MM-DD' or null (if ambiguous or in the past, null),\n"
+                "  \"patient_name\": string or null,\n"
+                "  \"corrections\": array of slot names to overwrite prior values.\n"
+                "}\n"
+                "Do not include any additional keys or commentary."
+            )
             
             response = self.client.chat.completions.create(
                 model="gpt-4o-mini",
@@ -64,17 +71,17 @@ class NLUProcessor:
                 logger.error("OpenAI returned empty content")
                 return self._fallback_intent_parsing(text)
             try:
-                result = json.loads(content)
+                data = json.loads(content)
+                extraction = LLMExtraction(**data)
                 
-                # Validate and clean the result
-                intent = result.get('intent', 'other')
+                intent = extraction.intent
                 entities = {
-                    'service_type': result.get('service_type'),
-                    'location': result.get('location'),
-                    'doctor_name': result.get('doctor_name'),
-                    'preferred_date': result.get('preferred_date'),
-                    'preferred_time': result.get('preferred_time'),
-                    'patient_name': result.get('patient_name')
+                    'service_type': extraction.service_type,
+                    'location': extraction.location,
+                    'preferred_date': extraction.preferred_date,
+                    'patient_name': extraction.patient_name,
+                    'corrections': extraction.corrections,
+                    'speech_text': text,
                 }
                 
                 # Generate response message
@@ -89,6 +96,9 @@ class NLUProcessor:
                 
             except json.JSONDecodeError:
                 logger.error(f"Failed to parse OpenAI response as JSON: {content}")
+                return self._fallback_intent_parsing(text)
+            except Exception as e:
+                logger.error(f"LLMExtraction validation error: {e}")
                 return self._fallback_intent_parsing(text)
                 
         except Exception as e:
@@ -131,9 +141,9 @@ class NLUProcessor:
         doctor_patterns = [
             r'dr\.?\s+(\w+)',
             r'doctor\s+(\w+)',
-            r'(\w+)\s+smith',
-            r'(\w+)\s+johnson',
-            r'(\w+)\s+lee'
+            r'(\w+)\s+vuong',
+            r'(\w+)\s+ye',
+            r'(\w+)\s+li'
         ]
         
         for pattern in doctor_patterns:

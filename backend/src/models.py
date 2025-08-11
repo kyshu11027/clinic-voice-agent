@@ -76,3 +76,16 @@ class IntentResponse(BaseModel):
     confidence: float
     entities: Dict[str, Any] = Field(default_factory=dict)
     response_message: str
+
+
+class LLMExtraction(BaseModel):
+    """Strict schema for LLM-extracted slots from a user utterance.
+    Dates must be ISO (YYYY-MM-DD) or null.
+    Strings must be normalized to match enums where applicable.
+    """
+    intent: Intent
+    service_type: Optional[str] = None  # expected values of ServiceType enum
+    location: Optional[str] = None      # expected values of Location enum
+    preferred_date: Optional[str] = None  # YYYY-MM-DD or None
+    patient_name: Optional[str] = None
+    corrections: List[str] = Field(default_factory=list)

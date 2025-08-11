@@ -33,7 +33,7 @@ async def handle_incoming_call(request: Request):
     response = VoiceResponse()
     
     # Greet the caller
-    response.say("Hello! Welcome to our chiropractic and acupuncture clinic. I'm your AI assistant. How can I help you today?")
+    response.say("Hello! Thank you for calling Juntendo clinic. How can I help you today?")
     
     # Gather speech input
     gather = Gather(
@@ -43,7 +43,6 @@ async def handle_incoming_call(request: Request):
         speech_timeout='auto',
         language='en-US'
     )
-    gather.say("Please tell me what you'd like to do. You can say things like 'schedule an appointment', 'reschedule my appointment', or 'cancel my appointment'.")
     response.append(gather)
     
     # Fallback if no input
@@ -73,11 +72,9 @@ async def handle_speech_input(
         response_message = call_flow_manager.process_speech_input(CallSid, SpeechResult)
         response.say(response_message)
         
-        # Get current call state to determine if we should continue
-        call_state = call_flow_manager.get_or_create_call_state(CallSid)
-        
-        # Continue conversation if not at final step (appointment confirmation)
-        if call_state.current_step != CallStep.CONFIRMING_APPOINTMENT:
+        # Decide whether to continue listening based on whether state still exists
+        state_exists = CallSid in call_flow_manager.call_states
+        if state_exists:
             gather = Gather(
                 input='speech',
                 action='/voice/handle',
@@ -86,12 +83,11 @@ async def handle_speech_input(
                 language='en-US'
             )
             response.append(gather)
-            
             # Fallback if no input
             response.say("I didn't hear anything. Please call back and let me know how I can help you.")
             response.hangup()
         else:
-            # End call after appointment confirmation
+            # State was cleared (e.g., after successful booking); end the call
             response.hangup()
         
     except Exception as e:

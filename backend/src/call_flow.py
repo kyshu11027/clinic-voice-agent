@@ -9,9 +9,9 @@ logger = logging.getLogger(__name__)
 
 # Required slots per intent (extensible)
 REQUIRED_SLOTS: Dict[Intent, List[str]] = {
-    Intent.SCHEDULE: ["service_type", "location", "preferred_date", "patient_name"],
-    Intent.RESCHEDULE: ["patient_name", "preferred_date"],
-    Intent.CANCEL: ["patient_name"],
+    Intent.SCHEDULE: ["service_type", "location", "preferred_date", "patient_name", "patient_phone"],
+    Intent.RESCHEDULE: ["patient_name", "preferred_date", "patient_phone"],
+    Intent.CANCEL: ["patient_name", "patient_phone"],
     Intent.OTHER: [],
 }
 
@@ -21,6 +21,7 @@ PROMPTS: Dict[str, str] = {
     "location": "Which location do you prefer: Highland Park or Arlington Heights?",
     "preferred_date": "What day would you like to come in? You can say today, tomorrow, or a weekday like next Tuesday, or a specific date like August 18th.",
     "patient_name": "What's your name?",
+    "patient_phone": "Please enter your phone number using your keypad, then press the pound sign.",
 }
 
 class CallFlowManager:
@@ -36,7 +37,7 @@ class CallFlowManager:
             f"[{label}] call_sid={call_state.call_sid} \n"
             f"step={call_state.current_step} intent={call_state.intent} \n"
             f"service_type={call_state.service_type} location={call_state.location} \n"
-            f"patient_name={call_state.patient_name} slots={slots_count} \n"
+            f"patient_name={call_state.patient_name} patient_phone={call_state.patient_phone} slots={slots_count} \n"
             f"preferred_date={call_state.preferred_date} \n"
         )
         logger.info(msg)
@@ -138,10 +139,13 @@ class CallFlowManager:
         # Apply corrections and update slots deterministically
         ents = intent_response.entities
         corrections = set((ents.get('corrections') or []))
+        
+        # Log what we received for debugging
+        logger.info(f"Processing entities: {ents}, corrections: {corrections}")
 
         # Update intent first
         call_state.intent = intent_response.intent
-        # Overwrite slots if provided or corrected
+        # Slot updates: LLM-first approach - allow NLU to populate slots normally, but prioritize corrections
         if 'service_type' in ents and (call_state.service_type is None or 'service_type' in corrections):
             try:
                 call_state.service_type = ServiceType(ents['service_type']) if ents['service_type'] else None
@@ -153,24 +157,16 @@ class CallFlowManager:
             except ValueError:
                 pass
         if 'preferred_date' in ents and (call_state.preferred_date is None or 'preferred_date' in corrections):
-            # Accept only ISO strings; if human-friendly, try to normalize
             pd = ents['preferred_date']
             if pd:
                 try:
-                    # Validate ISO quickly
                     d = datetime.fromisoformat(pd).date()
-                    # Enforce future or today; if past, drop and let prompt ask again
                     if d >= datetime.now().date():
                         call_state.preferred_date = pd
-                    else:
-                        # try to infer from speech_text instead (e.g., "this Friday")
-                        inferred = self._parse_preferred_date(ents.get('speech_text', '') or '')
-                        if inferred:
-                            call_state.preferred_date = inferred
                 except Exception:
+                    # Try to parse and normalize the date
                     inferred = self._parse_preferred_date(pd)
                     if inferred:
-                        # Re-check not in the past
                         try:
                             d2 = datetime.fromisoformat(inferred).date()
                             if d2 >= datetime.now().date():
@@ -179,6 +175,8 @@ class CallFlowManager:
                             pass
         if 'patient_name' in ents and (call_state.patient_name is None or 'patient_name' in corrections):
             call_state.patient_name = ents['patient_name']
+        if 'patient_phone' in ents and (call_state.patient_phone is None or 'patient_phone' in corrections):
+            call_state.patient_phone = ents['patient_phone']
 
         # Keep entities echo for debugging
         call_state.entities.update(intent_response.entities)
@@ -200,9 +198,29 @@ class CallFlowManager:
         """Handle the initial greeting step"""
         self._log_state(call_state, "greeting:entry")
         if intent_response.intent == Intent.SCHEDULE:
+            # Check if we already have all the required information
+            if (call_state.service_type and call_state.location and 
+                call_state.preferred_date and call_state.patient_name and call_state.patient_phone):
+                self._log_state(call_state, "greeting:all_slots_filled")
+                return self._find_available_slots(call_state)
+            
             call_state.current_step = CallStep.COLLECTING_INFO
             self._log_state(call_state, "greeting:to_collecting_info")
-            return "I'd be happy to help you schedule an appointment. Let me gather some information from you. What type of service would you like - chiropractic, acupuncture, cupping, or consultation?"
+            
+            # Check what information we still need and ask for the next missing piece
+            if not call_state.service_type:
+                return "I'd be happy to help you schedule an appointment. What type of service would you like - chiropractic, acupuncture, cupping, or consultation?"
+            elif not call_state.location:
+                return PROMPTS["location"]
+            elif not call_state.preferred_date:
+                return PROMPTS["preferred_date"]
+            elif not call_state.patient_name:
+                return PROMPTS["patient_name"]
+            elif not call_state.patient_phone:
+                return PROMPTS["patient_phone"]
+            else:
+                # This shouldn't happen since we already checked for all slots in greeting
+                return "Let me find available slots for you."
         elif intent_response.intent == Intent.RESCHEDULE:
             call_state.current_step = CallStep.RESCHEDULING
             self._log_state(call_state, "greeting:to_rescheduling")
@@ -256,6 +274,8 @@ class CallFlowManager:
         entities = intent_response.entities
         speech_text = intent_response.entities.get('speech_text', '').lower()
         
+
+        
         # Step 1: Get service type
         if not call_state.service_type:
             if entities.get('service_type'):
@@ -263,24 +283,15 @@ class CallFlowManager:
                     call_state.service_type = ServiceType(entities['service_type'])
                 except ValueError:
                     pass
-            
             if not call_state.service_type:
-                # Check for service type in speech
-                if any(word in speech_text for word in ['chiropractic', 'adjustment']):
-                    call_state.service_type = ServiceType.CHIROPRACTIC
-                elif 'acupuncture' in speech_text:
-                    call_state.service_type = ServiceType.ACUPUNCTURE
-                elif 'cupping' in speech_text:
-                    call_state.service_type = ServiceType.CUPPING
-                elif any(word in speech_text for word in ['consultation', 'consult']):
-                    call_state.service_type = ServiceType.CONSULTATION
-                else:
-                    self._log_state(call_state, "collecting_info:ask_service_type")
-                    return "I didn't catch the service type. Please choose from: chiropractic, acupuncture, cupping, or consultation."
+                self._log_state(call_state, "collecting_info:ask_service_type")
+                return "I didn't catch the service type. Please choose from: chiropractic, acupuncture, cupping, or consultation."
             
             # Move to next step
             self._log_state(call_state, "collecting_info:got_service_type")
-            return "Great! Which location would you prefer - Highland Park or Arlington Heights?"
+            if not call_state.location:
+                return PROMPTS["location"]
+            return "Great!"
         
         # Step 2: Get location
         elif not call_state.location:
@@ -289,60 +300,94 @@ class CallFlowManager:
                     call_state.location = Location(entities['location'])
                 except ValueError:
                     pass
-            
             if not call_state.location:
-                # Check for location in speech
-                if any(word in speech_text for word in ['highland park']):
-                    call_state.location = Location.HIGHLAND_PARK
-                elif any(word in speech_text for word in ['arlington heights']):
-                    call_state.location = Location.ARLINGTON_HEIGHTS
-                else:
-                    self._log_state(call_state, "collecting_info:ask_location")
-                    return "Please provide the location you'd like to visit. Please choose: Highland Park or Arlington Heights."
+                self._log_state(call_state, "collecting_info:ask_location")
+                return "Please provide the location you'd like to visit. Please choose: Highland Park or Arlington Heights."
             
             # Move to next step
             self._log_state(call_state, "collecting_info:got_location")
-            return "What day would you like to come in? You can say today, tomorrow, or a weekday like Monday or next Tuesday."
+            if not call_state.preferred_date:
+                return PROMPTS["preferred_date"]
+            return "Thanks!"
         
         # Step 3: Get preferred date
         elif not call_state.preferred_date:
-            # Try to infer from entities or speech
+            # Expect the date from NLU
             if entities.get('preferred_date'):
-                call_state.preferred_date = entities['preferred_date']
+                # Accept only if not in the past
+                try:
+                    d = datetime.fromisoformat(entities['preferred_date']).date()
+                    if d >= datetime.now().date():
+                        call_state.preferred_date = entities['preferred_date']
+                    else:
+                        self._log_state(call_state, "collecting_info:ask_date")
+                        return "That date seems to be in the past. Please say today, tomorrow, or a weekday like next Tuesday."
+                except Exception:
+                    # Fallback to inference
+                    inferred = self._parse_preferred_date(entities['preferred_date'])
+                    if inferred:
+                        try:
+                            d2 = datetime.fromisoformat(inferred).date()
+                            if d2 >= datetime.now().date():
+                                call_state.preferred_date = inferred
+                            else:
+                                self._log_state(call_state, "collecting_info:ask_date")
+                                return "That date seems to be in the past. Please say today, tomorrow, or a weekday like next Tuesday."
+                        except Exception:
+                            self._log_state(call_state, "collecting_info:ask_date")
+                            return "I couldn't understand the date. Please say today, tomorrow, or a weekday like next Tuesday."
             else:
-                inferred = self._parse_preferred_date(speech_text)
-                if inferred:
-                    call_state.preferred_date = inferred
-                else:
-                    self._log_state(call_state, "collecting_info:ask_date")
-                    return "What day would you like to come in? You can say today, tomorrow, or a weekday like Monday or next Tuesday."
+                self._log_state(call_state, "collecting_info:ask_date")
+                return "What day would you like to come in? You can say today, tomorrow, or a weekday like Monday or next Tuesday."
 
             # Move to next step
             self._log_state(call_state, "collecting_info:got_date")
+
+            if not call_state.patient_name:
+                return PROMPTS["patient_name"]
             return "Thanks!"
 
         # Step 4: Get patient name
         elif not call_state.patient_name:
+            # If user is correcting other slots here, don't infer name from that utterance
+            if (entities.get('location') or entities.get('service_type')) and not entities.get('patient_name'):
+                self._log_state(call_state, "collecting_info:ask_name")
+                return PROMPTS["patient_name"]
+
+            if any(token in speech_text for token in ["actually", "change", "correction"]):
+                self._log_state(call_state, "collecting_info:ask_name")
+                return PROMPTS["patient_name"]
+
+            # Guard: if the user says another date here (e.g., "next Tuesday"),
+            # treat it as a date correction instead of a name.
+            if entities.get('preferred_date'):
+                call_state.preferred_date = entities['preferred_date']
+                self._log_state(call_state, "collecting_info:got_date")
+                return PROMPTS["patient_name"]
+
+            # Expect the name from NLU
             if entities.get('patient_name'):
                 call_state.patient_name = entities['patient_name']
             else:
-                # Try to extract name from speech (simple approach)
-                import re
-                # Look for common name patterns
-                name_match = re.search(r'my name is (\w+)', speech_text)
-                if name_match:
-                    call_state.patient_name = name_match.group(1).title()
-                else:
-                    # Just use the first few words as name
-                    words = speech_text.split()
-                    if len(words) >= 2:
-                        call_state.patient_name = f"{words[0].title()} {words[1].title()}"
-                    else:
-                        self._log_state(call_state, "collecting_info:ask_name")
-                        return "I didn't catch your name. Please tell me your name."
+                self._log_state(call_state, "collecting_info:ask_name")
+                return PROMPTS["patient_name"]
             
             # We have all the information, find available slots
             self._log_state(call_state, "collecting_info:got_name")
+            if not call_state.patient_phone:
+                return PROMPTS["patient_phone"]
+            return "Thanks!"
+        
+        # Step 5: Get patient phone number
+        elif not call_state.patient_phone:
+            if entities.get('patient_phone'):
+                call_state.patient_phone = entities['patient_phone']
+            else:
+                self._log_state(call_state, "collecting_info:ask_phone")
+                return PROMPTS["patient_phone"]
+            
+            # We have all the information, find available slots
+            self._log_state(call_state, "collecting_info:got_phone")
             return "Thanks!"
         
         # All information collected, find available slots
@@ -382,7 +427,9 @@ class CallFlowManager:
             )
             
             if not slots:
-                return f"I'm sorry, but I don't see any available {call_state.service_type.value} appointments at our {call_state.location.name} location for {call_state.preferred_date}. Please call back later or try a different location."
+                # Use the proper location name from clinic data
+                location_name = "Arlington Heights" if call_state.location.value == "arlington_heights" else "Highland Park"
+                return f"I'm sorry, but I don't see any available {call_state.service_type.value} appointments at our {location_name} location for {call_state.preferred_date}. Please call back later or try a different location."
             
             # For MVP, we'll offer the first 3 available slots
             available_slots = slots[:3]
@@ -399,7 +446,9 @@ class CallFlowManager:
             
             call_state.current_step = CallStep.CONFIRMING_APPOINTMENT
             self._log_state(call_state, "find_slots:to_confirming")
-            return f"Great! I found some available {call_state.service_type.value} appointments at our {call_state.location.value.replace('_', ' ')} location. Here are your options: {slots_text}. Which one would you like? Please say the number."
+            # Use the proper location name from clinic data instead of enum value
+            location_name = "Arlington Heights" if call_state.location.value == "arlington_heights" else "Highland Park"
+            return f"Great! I found some available {call_state.service_type.value} appointments at our {location_name} location. Here are your options: {slots_text}. Which one would you like? Please say the number."
             
         except Exception as e:
             logger.error(f"Error finding available slots: {e}")
@@ -420,7 +469,7 @@ class CallFlowManager:
                 selected_slot = call_state.available_slots[slot_number - 1]
                 
                 # Ensure all required fields are present
-                if not call_state.service_type or not call_state.location or not call_state.patient_name:
+                if not call_state.service_type or not call_state.location or not call_state.patient_name or not call_state.patient_phone:
                     return "I'm sorry, I'm missing some information. Please start over."
                 
                 # Create the appointment
@@ -430,7 +479,7 @@ class CallFlowManager:
                     doctor_id=selected_slot.doctor_id,
                     datetime_obj=selected_slot.datetime,
                     patient_name=call_state.patient_name,
-                    patient_phone="unknown"  # We don't have phone number in MVP
+                    patient_phone=call_state.patient_phone
                 )
                 
                 if appointment:
@@ -441,7 +490,9 @@ class CallFlowManager:
                     del self.call_states[call_state.call_sid]
                     print(f"[confirming:booked] call_sid={call_state.call_sid} appointment_id={appointment.id}", flush=True)
                     
-                    return f"Perfect! I've scheduled your {call_state.service_type.value} appointment with {selected_slot.doctor_name} on {date_str} at {time_str} at our {call_state.location.value} location. You'll receive a confirmation shortly. Thank you for calling!"
+                    # Use the proper location name from clinic data
+                    location_name = "Arlington Heights" if call_state.location.value == "arlington_heights" else "Highland Park"
+                    return f"Perfect! I've scheduled your {call_state.service_type.value} appointment with {selected_slot.doctor_name} on {date_str} at {time_str} at our {location_name} location. You'll receive a confirmation shortly. Thank you for calling!"
                 else:
                     return "I'm sorry, I wasn't able to schedule your appointment. Please call back and try again."
             else:
